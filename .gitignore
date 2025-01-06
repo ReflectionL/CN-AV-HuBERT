@@ -4,4 +4,8 @@ exp/
 # Ignore repeproject folder
 .ropeproject/
 
+# Ignore pycache folder
 */__pycache__/
+
+# Ignore data folder
+data/
