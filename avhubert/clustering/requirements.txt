@@ -1,0 +1,5 @@
+soundfile
+joblib
+scikit-learn
+npy-append-array
+submitit

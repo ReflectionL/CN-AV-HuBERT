@@ -1,0 +1,7 @@
+# Ignore experiment outputs
+exp/
+
+# Ignore repeproject folder
+.ropeproject/
+
+*/__pycache__/
