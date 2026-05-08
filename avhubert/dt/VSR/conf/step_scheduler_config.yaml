@@ -1,0 +1,24 @@
+# 示例配置：使用基于loss的step学习率调度器
+# 适用于resume训练，每3个epoch loss不下降就将学习率减半
+
+optimizer:
+  lr: 0.001  # 初始学习率（这个值会被resume_lr覆盖，如果使用step调度器）
+  weight_decay: 0.0001
+  warmup_epochs: 5  # 仅用于cosine调度器
+  
+  # Step调度器相关配置
+  use_step_scheduler: true  # 设为true启用step调度器，false使用cosine调度器
+  resume_lr: 0.001  # resume训练时的固定学习率（约1e-3）
+  step_scheduler_patience: 3  # 容忍的epoch数，连续3个epoch loss不下降就调整学习率
+  step_scheduler_factor: 0.5  # 学习率衰减因子（减半）
+  step_scheduler_min_lr: 1e-6  # 最小学习率限制
+
+trainer:
+  max_epochs: 100
+  check_val_every_n_epoch: 1  # 每epoch都进行验证，以便调度器及时响应
+
+# 使用说明：
+# 1. 设置 use_step_scheduler: true 来启用新的调度器
+# 2. 设置 resume_lr 为你checkpoint的学习率值（约1e-3）
+# 3. 调整 step_scheduler_patience 来控制多少个epoch后开始衰减学习率
+# 4. 调整 step_scheduler_factor 来控制学习率衰减的程度 

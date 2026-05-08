@@ -5,7 +5,7 @@ echo 'root path' ${root}
 echo 'label path' ${label_path}
 
 export NCCL_DEBUG=INFO
-export CUDA_VISIBLE_DEVICES=4,5
+export CUDA_VISIBLE_DEVICES=0,1
 
 # export NCCL_P2P_DISABLE=1       # 禁用 P2P 通信
 # export NCCL_IB_DISABLE=1        # 禁用 InfiniBand

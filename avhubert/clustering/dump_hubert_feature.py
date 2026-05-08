@@ -9,6 +9,8 @@ import math
 import os
 import sys
 
+import sys
+sys.path.append('/home/lixiaolou/code/CN-AV-HuBERT/fairseq')
 import fairseq
 import soundfile as sf
 import torch
@@ -109,6 +111,7 @@ class HubertFeatureReader(object):
 def get_path_iterator(tsv, nshard, rank):
     with open(tsv, "r") as f:
         root = f.readline().rstrip()
+        root = root + '/'
         lines = [line.rstrip() for line in f]
         tot = len(lines)
         shard_size = math.ceil(tot / nshard)

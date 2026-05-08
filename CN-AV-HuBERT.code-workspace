@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"name": "CN-AV-HuBERT",
+			"path": "."
+		},
+		{
+			"name": "CNVSRC2024Baseline",
+			"path": "../CNVSRC2024Baseline"
+		},
+		{
+			"name": "avhubert_exp",
+			"path": "../../../../hdd2/avhubert_exp"
+		},
+		{
+			"path": "../../../../hdd2/exp"
+		}
+	],
+	"settings": {}
+}

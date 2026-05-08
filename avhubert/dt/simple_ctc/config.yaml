@@ -1,0 +1,12 @@
+ckpt: /path/to/pretrained/checkpoint_best.pt
+train_tsv: /path/to/train.tsv
+dict: /path/to/dict.txt
+save_dir: lp_runs/run1
+lr: 0.002
+wd: 0.0
+bs: 16
+max_steps: 4000
+valid_interval: 200
+min_rel_improve: 0.002
+early_stop_patience: 5
+modality: av

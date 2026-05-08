@@ -3,3 +3,4 @@ joblib
 scikit-learn
 npy-append-array
 submitit
+tqdm

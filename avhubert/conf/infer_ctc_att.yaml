@@ -1,0 +1,25 @@
+common:
+  user_dir: ???
+
+common_eval:
+  results_path: ???
+  path: ???
+
+dataset:
+  max_tokens: 750
+  gen_subset: test
+  num_workers: 0
+
+override:
+  noise_prob: 0.0
+  noise_snr: 0
+  modalities: ???
+  data: ???
+  label_dir: ???
+  # CTC + Attention joint decoding parameters
+  ctc_weight: 0.3        # 0.0 = attention-only, 1.0 = CTC-only
+  beam_size: 10
+  lm_weight: 0.0
+  length_bonus: 0.0
+  maxlenratio: -200      # 0 = end-detect; >0 = ratio×T; <0 = absolute cap (-N → max N tokens)
+  minlenratio: 0.0

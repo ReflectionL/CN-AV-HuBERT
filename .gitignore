@@ -5,7 +5,10 @@ exp/
 .ropeproject/
 
 # Ignore pycache folder
-*/__pycache__/
+__pycache__/
 
 # Ignore data folder
-data/
+data/*
+
+*/outputs/*
+outputs/

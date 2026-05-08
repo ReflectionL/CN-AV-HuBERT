@@ -1,22 +1,25 @@
-label_path = '/home/lixiaolou/data/avhubert_pretrain_data'
+code_path = '/home/lixiaolou/code/CN-AV-HuBERT'
+label_path_root = '/hdd1/avhubert_processed_data'
+dataset = 'cncvs3'
+label_path = f'{label_path_root}/{dataset}'
 
-# echo 'extract MFCC feature'
-# CUDA_VISIBLE_DEVICES=4 python dump_mfcc_feature.py \
-#     /home/lixiaolou/code/CN-AV-HuBERT/data/cnvsrc-multi/ \
-#     test \
-#     1 \
-#     0 \
-#     ${label_path}/avhubert_feature/mfcc/
+echo 'extract MFCC feature'
+CUDA_VISIBLE_DEVICES=4 python dump_mfcc_feature.py \
+    ${code_path}/data/${dataset}/ \
+    test \
+    1 \
+    0 \
+    ${label_path}/avhubert_feature/mfcc/
+
+CUDA_VISIBLE_DEVICES=4 python dump_mfcc_feature.py \
+    ${code_path}/data/${dataset}/ \
+    valid \
+    1 \
+    0 \
+    ${label_path}/avhubert_feature/mfcc/
 
 # CUDA_VISIBLE_DEVICES=4 python dump_mfcc_feature.py \
-#     /home/lixiaolou/code/CN-AV-HuBERT/data/cnvsrc-multi/ \
-#     valid \
-#     1 \
-#     0 \
-#     ${label_path}/avhubert_feature/mfcc/
-
-# CUDA_VISIBLE_DEVICES=4 python dump_mfcc_feature.py \
-#     /home/lixiaolou/code/CN-AV-HuBERT/data/cnvsrc-multi/ \
+#     ${code_path}/data/${dataset}/ \
 #     train \
 #     1 \
 #     0 \

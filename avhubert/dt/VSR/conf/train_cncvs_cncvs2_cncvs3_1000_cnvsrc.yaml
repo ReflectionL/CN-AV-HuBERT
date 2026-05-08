@@ -1,0 +1,140 @@
+code_root_dir: /home/lixiaolou/code/CNVSRC2024Baseline
+data_root_dir: /ssd1/processed
+dataset: cncvs_cncvs2_cncvs3_1000_cnvsrc
+mode: train
+
+hydra:
+    run:
+        dir: ${exp_dir}/${exp_name}/runs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    output_subdir: config
+    sweep:
+        dir: ${exp_dir}/${exp_name}/multiruns/${now:%Y-%m-%d}/${now:%H-%M-%S}
+        subdir: ${hydra.job.num}
+checkpoint:
+    save_top_k: 10
+data:
+    modality: video
+    use_audio_normalise: false
+    max_frames: 3000 # frames control the batch size
+    max_frames_val: 3000
+    dataset:
+        root: ${data_root_dir}
+        code_root: ${code_root_dir}/data
+        label_dir: ${dataset}/
+        train_file: train.csv
+        val_file: valid.csv
+        test_file: valid.csv
+    max_length: 750 # max length of one video
+logger:
+    _target_: pytorch_lightning.loggers.WandbLogger
+    log_model: true
+    name: ${exp_name}
+    offline: false
+    project: auto_avsr
+    mode: online
+    entity: null
+model:
+    visual_backbone:
+        adim: 768
+        aheads: 12
+        eunits: 3072
+        elayers: 12
+        transformer_input_layer: conv3d
+        dropout_rate: 0.1
+        transformer_attn_dropout_rate: 0.1
+        transformer_encoder_attn_layer_type: rel_mha
+        macaron_style: true
+        use_cnn_module: true
+        cnn_module_kernel: 31
+        zero_triu: false
+        a_upsample_ratio: 1
+        relu_type: swish
+        ddim: ${model.visual_backbone.adim}
+        dheads: ${model.visual_backbone.aheads}
+        dunits: 3072
+        dlayers: 6
+        r_dlayers: 3
+        lsm_weight: 0.1
+        transformer_length_normalized_loss: false
+        mtlalpha: 0.1
+        mtlbeta: 0.3
+        ctc_type: builtin
+        rel_pos_type: latest
+    audio_backbone:
+        adim: 768
+        aheads: 12
+        eunits: 3072
+        elayers: 12
+        transformer_input_layer: conv1d
+        dropout_rate: 0.1
+        transformer_attn_dropout_rate: 0.1
+        transformer_encoder_attn_layer_type: rel_mha
+        macaron_style: true
+        use_cnn_module: true
+        cnn_module_kernel: 31
+        zero_triu: false
+        a_upsample_ratio: 1
+        relu_type: swish
+        ddim: ${model.audio_backbone.adim}
+        dheads: ${model.audio_backbone.aheads}
+        dlayers: 6
+        lsm_weight: 0.1
+        transformer_length_normalized_loss: false
+        mtlalpha: 0.1
+        mtlbeta: 0.3
+        ctc_type: builtin
+        rel_pos_type: latest
+    language_model:
+        pos_enc: none
+        embed_unit: 128
+        att_unit: 512
+        head: 8
+        unit: 2048
+        layer: 16
+        dropout_rate: 0.0
+optimizer:
+    name: adamw
+    lr: 0.003
+    warmup_epochs: 5
+    weight_decay: 0.03
+    betas:
+        - 0.9
+        - 0.98
+    # Step调度器相关配置
+    use_step_scheduler: false  # 设为true启用step调度器，false使用cosine调度器
+    resume_lr: 0.001  # resume训练时的固定学习率（约1e-3）
+    step_scheduler_patience: 3  # 容忍的epoch数，连续3个epoch loss不下降就调整学习率
+    step_scheduler_factor: 0.5  # 学习率衰减因子（减半）
+    step_scheduler_min_lr: 1e-5  # 最小学习率限制
+trainer:
+    precision: 32
+    max_epochs: 150
+    num_nodes: 1
+    gpus: -1
+    sync_batchnorm: true
+    default_root_dir: ${exp_dir}
+    num_sanity_val_steps: 0
+    limit_val_batches: 1.0
+    accumulate_grad_batches: 1
+    gradient_clip_val: 5.0
+    replace_sampler_ddp: false
+    resume_from_checkpoint: null
+    check_val_every_n_epoch: 1  # 每epoch都进行验证，以便调度器及时响应
+decode:
+    name: default
+    snr_target: 999999
+
+exp_dir: /hdd2/exp/
+exp_name: ${mode}_${dataset}_epoch_150/
+num_workers: 8
+gpus: 1
+slurm_job_id: 1
+train: true
+log_wandb: false
+infer_path: null
+ckpt_path: /home/lixiaolou/code/CNVSRC2024Baseline/pretrained_models/model_avg_cncvs_4s_30s.pth
+# ckpt_path: null
+transfer_frontend: false
+remove_ctc: false
+# resume_from_checkpoint: /hdd2/exp/train_cncvs_cncvs2_cncvs3_1000_cnvsrc/last.ckpt
+resume_from_checkpoint: null

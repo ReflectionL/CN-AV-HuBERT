@@ -229,6 +229,59 @@ def _main(cfg, output_file):
         gen_timer.stop(num_generated_tokens)
 
         for i in range(len(sample["id"])):
+            # === 调试断点: 检查label_processors的字典 ===
+            __import__("ipdb").set_trace()
+            print(f"=== Label Processors 字典调试 ===")
+            dataset = task.dataset(cfg.dataset.gen_subset)
+            if hasattr(dataset, 'label_processors') and dataset.label_processors:
+                label_proc = dataset.label_processors[0]
+                print(f"Label processor类型: {type(label_proc)}")
+                if hasattr(label_proc, 'dictionary'):
+                    proc_dict = label_proc.dictionary
+                    print(f"Label processor字典大小: {len(proc_dict)}")
+                    print(f"Label processor字典前5个符号: {proc_dict.symbols[:5]}")
+                    print(f"Label processor pad: {proc_dict.pad()} -> '{proc_dict.symbols[proc_dict.pad()]}'")
+                    print(f"Label processor eos: {proc_dict.eos()} -> '{proc_dict.symbols[proc_dict.eos()]}'")
+                    print(f"Label processor unk: {proc_dict.unk()} -> '{proc_dict.symbols[proc_dict.unk()]}'")
+                    
+                    # 对比task.target_dictionary
+                    task_dict = task.target_dictionary
+                    print(f"Task字典大小: {len(task_dict)}")
+                    print(f"Task字典前5个符号: {task_dict.symbols[:5]}")
+                    print(f"字典是否相同: {proc_dict is task_dict}")
+                    
+                    # 测试bpe_tokenizer
+                    if hasattr(label_proc, 'bpe_tokenizer'):
+                        bpe_tok = label_proc.bpe_tokenizer
+                        print(f"BPE tokenizer: {bpe_tok}")
+                        print(f"BPE tokenizer类型: {type(bpe_tok)}")
+                        if bpe_tok:
+                            test_text = "但 是 老"
+                            print(f"BPE编码测试 '{test_text}':")
+                            try:
+                                bpe_encoded = bpe_tok.encode(test_text.lower())
+                                print(f"  BPE编码结果: '{bpe_encoded}'")
+                                print(f"  BPE编码类型: {type(bpe_encoded)}")
+                                
+                                # 然后测试dictionary.encode_line
+                                dict_encoded = proc_dict.encode_line(bpe_encoded, append_eos=True, add_if_not_exist=False)
+                                print(f"  Dictionary编码结果: {dict_encoded}")
+                            except Exception as e:
+                                print(f"  BPE编码失败: {e}")
+                        else:
+                            print("BPE tokenizer是None!")
+                    
+                    # 测试完整编码流程
+                    if hasattr(label_proc, '__call__'):
+                        test_text = "但 是 老"
+                        print(f"完整编码测试 '{test_text}':")
+                        try:
+                            encoded = label_proc(test_text)
+                            print(f"  编码结果: {encoded}")
+                            print(f"  编码类型: {type(encoded)}")
+                        except Exception as e:
+                            print(f"  编码失败: {e}")
+            print("=" * 50)
             result_dict['utt_id'].append(sample['utt_id'][i])
             ref_sent = decode_fn(sample['target'][i].int().cpu())
             result_dict['ref'].append(ref_sent)

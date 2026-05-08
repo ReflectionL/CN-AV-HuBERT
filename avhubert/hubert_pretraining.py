@@ -22,6 +22,13 @@ from omegaconf import MISSING, II
 import numpy as np
 from argparse import Namespace
 
+# Import char_tokenizer to register it with fairseq
+try:
+    from . import char_tokenizer
+except ImportError:
+    # Try absolute import if relative import fails
+    import char_tokenizer
+
 DBG=True if len(sys.argv) == 1 else False
 
 if DBG:
@@ -152,6 +159,7 @@ class AVHubertPretrainingConfig(FairseqDataclass):
     is_s2s: bool=field(default=False, metadata={'help': 'seq2seq fine-tuning only'})
     tokenizer_bpe_name: Optional[str] = field(default=None, metadata={'help': 'tokenizer model name'})
     tokenizer_bpe_model: Optional[str] = field(default=None, metadata={'help': 'tokenizer model path'})
+    char_dict_path: Optional[str] = field(default=None, metadata={'help': 'path to character dictionary for char_tokenizer'})
     noise_wav: Optional[str] = field(default=None, metadata={'help': 'manifest of noise wav files (one wav file path per line)'})
     noise_prob: float = field(default=0, metadata={'help': 'noise probability'})
     noise_snr: Optional[str] = field(default='0', metadata={'help': 'noise SNR in audio'})
@@ -203,7 +211,23 @@ class AVHubertPretrainingTask(FairseqTask):
         return dictionaries[0] if self.cfg.fine_tuning else dictionaries
 
     def load_tokenizer(self):
-        bpe_args = Namespace(**{'bpe': self.cfg.tokenizer_bpe_name, f"{self.cfg.tokenizer_bpe_name}_model": self.cfg.tokenizer_bpe_model})
+        # 构建tokenizer参数
+        if self.cfg.tokenizer_bpe_name == 'char_tokenizer':
+            # 对于char_tokenizer，使用char_dict_path参数
+            if not hasattr(self.cfg, 'char_dict_path') or self.cfg.char_dict_path is None:
+                raise ValueError("char_dict_path is required when using char_tokenizer")
+            bpe_args = Namespace(**{
+                'bpe': self.cfg.tokenizer_bpe_name, 
+                'char_dict_path': self.cfg.char_dict_path
+            })
+        else:
+            # 对于其他tokenizer（如sentencepiece），保持原有逻辑
+            if self.cfg.tokenizer_bpe_model is None:
+                raise ValueError(f"tokenizer_bpe_model is required when using {self.cfg.tokenizer_bpe_name}")
+            bpe_args = Namespace(**{
+                'bpe': self.cfg.tokenizer_bpe_name, 
+                f"{self.cfg.tokenizer_bpe_name}_model": self.cfg.tokenizer_bpe_model
+            })
         bpe_tokenizer = encoders.build_bpe(bpe_args)
         return bpe_tokenizer
 

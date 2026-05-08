@@ -127,9 +127,9 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--csv_path", help="Input CSV file path", default="/home/lixiaolou/code/CNVSRC2024Baseline/data/cnvsrc-single/train.csv")
-    parser.add_argument("--output_path", help="Output TSV file path", default="/home/lixiaolou/code/CN-AV-HuBERT/data/cnvsrc-single/train.tsv")
-    parser.add_argument("--root_dir", help="Root directory of dataset", default="/home/lixiaolou/data/processed")
+    parser.add_argument("--csv_path", help="Input CSV file path", default="/home/lixiaolou/code/CNVSRC2024Baseline/data/cncvs3/train.csv")
+    parser.add_argument("--output_path", help="Output TSV file path", default="/home/lixiaolou/code/CN-AV-HuBERT/data/cncvs3/train_full.tsv")
+    parser.add_argument("--root_dir", help="Root directory of dataset", default="/ssd1/processed")
 
     args = parser.parse_args()
 

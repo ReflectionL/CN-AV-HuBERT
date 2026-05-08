@@ -247,6 +247,56 @@ class AVHubertSeq2SeqConfig(AVHubertAsrConfig):
         metadata={"help": "share decoder input and output embeddings"},
     )
     no_scale_embedding: bool = field(default=True, metadata={'help': 'scale embedding'})
+    use_reverse_decoder: bool = field(
+        default=False,
+        metadata={"help": "use a reverse decoder for bidirectional training"},
+    )
+    reverse_weight: float = field(
+        default=0.3,
+        metadata={"help": "weight for reverse decoder loss (0.0-1.0)"},
+    )
+    reverse_decoder_layers: int = field(
+        default=-1,
+        metadata={"help": "num of reverse decoder layers; -1 means same as decoder_layers"},
+    )
+    use_ctc: bool = field(
+        default=False,
+        metadata={"help": "add CTC auxiliary loss on encoder output"},
+    )
+    ctc_weight: float = field(
+        default=0.1,
+        metadata={"help": "weight for CTC loss (0.0-1.0)"},
+    )
+    encoder_lr_scale: float = field(
+        default=1.0,
+        metadata={"help": "scale encoder gradients by this factor relative to decoder; "
+                  "e.g. 0.1 means encoder effective LR is 1/10 of global LR"},
+    )
+    encoder_unfreeze_warmup: int = field(
+        default=0,
+        metadata={"help": "linearly ramp encoder grad scale from 0 to encoder_lr_scale "
+                  "over this many updates after freeze_finetune_updates; 0 = no warmup"},
+    )
+
+
+class _GradScale(torch.autograd.Function):
+    """Pass-through in forward, scale gradients by `scale` in backward."""
+    @staticmethod
+    def forward(ctx, x, scale):
+        ctx.scale = scale
+        return x
+
+    @staticmethod
+    def backward(ctx, grad):
+        return grad * ctx.scale, None
+
+
+def grad_scale(x: torch.Tensor, scale: float) -> torch.Tensor:
+    """Scale gradients of `x` by `scale` without changing the forward value."""
+    if scale == 1.0:
+        return x
+    return _GradScale.apply(x, scale)
+
 
 class HubertEncoder(FairseqEncoder):
     def __init__(self, cfg: AVHubertAsrConfig, tgt_dict=None):
@@ -300,7 +350,18 @@ class HubertEncoder(FairseqEncoder):
 
         if state is not None and not cfg.no_pretrained_weights:
             # set strict=False because we omit some modules
+            print("--------------------------------")
+            print()
+            print(f"Loading pretrained weights from: {cfg.w2v_path}")
+            print()
+            print("--------------------------------")
             model.load_state_dict(state["model"], strict=False)
+        else:
+            print("--------------------------------")
+            print()
+            print("No pretrained weights to load")
+            print()
+            print("--------------------------------")
 
         model.remove_pretraining_modules()
 
@@ -410,10 +471,37 @@ class HubertEncoderWrapper(FairseqEncoder):
 
 @register_model("av_hubert_seq2seq", dataclass=AVHubertSeq2SeqConfig)
 class AVHubertSeq2Seq(FairseqEncoderDecoderModel):
-    def __init__(self, encoder, decoder, tgt_dict, cfg):
+    def __init__(self, encoder, decoder, tgt_dict, cfg, r_decoder=None, ctc_proj=None):
         super().__init__(encoder, decoder)
         self.cfg = cfg
         self.freeze_finetune_updates = cfg.freeze_finetune_updates
+        self.num_updates = 0
+        self.r_decoder = r_decoder
+        self.use_reverse_decoder = cfg.use_reverse_decoder
+        self.reverse_weight = getattr(cfg, 'reverse_weight', 0.3)
+        self.use_ctc = getattr(cfg, 'use_ctc', False)
+        self.ctc_proj = ctc_proj
+        self.encoder_lr_scale = getattr(cfg, 'encoder_lr_scale', 1.0)
+        self.encoder_unfreeze_warmup = getattr(cfg, 'encoder_unfreeze_warmup', 0)
+
+    def set_num_updates(self, num_updates):
+        super().set_num_updates(num_updates)
+        self.num_updates = num_updates
+
+    def _get_encoder_grad_scale(self) -> float:
+        """Compute the current encoder gradient scale.
+
+        - While frozen: gradients are blocked by no_grad, scale is irrelevant.
+        - During unfreeze warmup: linearly ramp from 0 → encoder_lr_scale.
+        - After warmup: constant encoder_lr_scale.
+        """
+        if self.encoder_lr_scale == 1.0 and self.encoder_unfreeze_warmup == 0:
+            return 1.0
+        updates_since_unfreeze = self.num_updates - self.freeze_finetune_updates
+        if self.encoder_unfreeze_warmup > 0 and updates_since_unfreeze < self.encoder_unfreeze_warmup:
+            warmup_ratio = updates_since_unfreeze / max(1, self.encoder_unfreeze_warmup)
+            return warmup_ratio * self.encoder_lr_scale
+        return self.encoder_lr_scale
 
     @classmethod
     def build_model(cls, cfg, task):
@@ -487,15 +575,80 @@ class AVHubertSeq2Seq(FairseqEncoderDecoderModel):
         decoder_embed_tokens = build_embedding(tgt_dict, cfg.decoder_embed_dim)
         decoder = TransformerDecoder(cfg, tgt_dict, decoder_embed_tokens)
 
-        return AVHubertSeq2Seq(encoder, decoder, tgt_dict, cfg)
+        r_decoder = None
+        if cfg.use_reverse_decoder:
+            r_decoder_embed_tokens = build_embedding(tgt_dict, cfg.decoder_embed_dim)
+            r_dlayers = cfg.reverse_decoder_layers if cfg.reverse_decoder_layers > 0 else cfg.decoder_layers
+            if r_dlayers != cfg.decoder_layers:
+                import copy
+                r_cfg = copy.copy(cfg)
+                r_cfg.decoder_layers = r_dlayers
+                r_decoder = TransformerDecoder(r_cfg, tgt_dict, r_decoder_embed_tokens)
+            else:
+                r_decoder = TransformerDecoder(cfg, tgt_dict, r_decoder_embed_tokens)
+
+        ctc_proj = None
+        if cfg.use_ctc:
+            encoder_embed_dim = w2v_args.model.encoder_embed_dim
+            ctc_proj = Linear(encoder_embed_dim, len(tgt_dict))
+
+        return AVHubertSeq2Seq(encoder, decoder, tgt_dict, cfg, r_decoder=r_decoder, ctc_proj=ctc_proj)
 
 
     def forward(self, **kwargs):
         ft = self.freeze_finetune_updates <= self.num_updates
         with torch.no_grad() if not ft else contextlib.ExitStack():
             output = self.encoder(**kwargs)
+
+        # Apply encoder gradient scaling (separate encoder LR + optional unfreeze warmup).
+        # Scaling the encoder_out tensor in backward effectively scales all encoder
+        # parameter gradients without changing forward values.
+        if ft and self.training:
+            enc_scale = self._get_encoder_grad_scale()
+            if enc_scale != 1.0:
+                output = {
+                    **output,
+                    "encoder_out": grad_scale(output["encoder_out"], enc_scale),
+                }
+
         decoder_out = self.decoder(prev_output_tokens=kwargs['prev_output_tokens'], encoder_out=output)
+
+        if self.use_ctc and self.ctc_proj is not None:
+            encoder_out_t = output["encoder_out"]  # T x B x C
+            ctc_logits = self.ctc_proj(encoder_out_t)  # T x B x vocab
+            decoder_out[1]["ctc_logits"] = ctc_logits
+            decoder_out[1]["encoder_padding_mask"] = output.get("encoder_padding_mask")
+
+        if self.use_reverse_decoder and self.r_decoder is not None:
+            reversed_prev_output_tokens = self._reverse_prev_output_tokens(
+                kwargs['prev_output_tokens']
+            )
+            r_decoder_out = self.r_decoder(
+                prev_output_tokens=reversed_prev_output_tokens, encoder_out=output
+            )
+            decoder_out[1]['r_decoder_logits'] = r_decoder_out[0]
+
         return decoder_out
+
+    def _reverse_prev_output_tokens(self, prev_output_tokens):
+        """Reverse target tokens while keeping BOS at the start and PAD at the end.
+
+        prev_output_tokens: (B, T) = [BOS, t1, t2, ..., tn, PAD, PAD, ...]
+        returns:            (B, T) = [BOS, tn, ..., t2, t1, PAD, PAD, ...]
+        """
+        pad_idx = self.decoder.dictionary.pad()
+        bos = prev_output_tokens[:, :1]
+        tokens = prev_output_tokens[:, 1:]
+
+        lengths = tokens.ne(pad_idx).sum(dim=1)
+
+        reversed_tokens = tokens.clone()
+        for i in range(tokens.size(0)):
+            l = lengths[i].item()
+            if l > 0:
+                reversed_tokens[i, :l] = tokens[i, :l].flip(0)
+
+        return torch.cat([bos, reversed_tokens], dim=1)
 
     def upgrade_state_dict_named(self, state_dict, name):
         super().upgrade_state_dict_named(state_dict, name)

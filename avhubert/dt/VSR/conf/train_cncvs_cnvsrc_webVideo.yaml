@@ -1,0 +1,129 @@
+code_root_dir: /home/lixiaolou/code/CNVSRC2024Baseline
+data_root_dir: /ssd1/processed
+
+hydra:
+    run:
+        dir: ${exp_dir}/${exp_name}/runs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    output_subdir: config
+    sweep:
+        dir: ${exp_dir}/${exp_name}/multiruns/${now:%Y-%m-%d}/${now:%H-%M-%S}
+        subdir: ${hydra.job.num}
+checkpoint:
+    save_top_k: 50 
+data:
+    modality: video
+    use_audio_normalise: false
+    max_frames: 3000 # frames control the batch size
+    max_frames_val: 3000
+    dataset:
+        root: ${data_root_dir}
+        code_root: ${code_root_dir}/data
+        label_dir: cncvs_cnvsrc_webVideo/
+        train_file: train.csv
+        val_file: valid.csv
+        test_file: valid.csv
+    max_length: 750 # max length of one video
+logger:
+    _target_: pytorch_lightning.loggers.WandbLogger
+    log_model: true
+    name: ${exp_name}
+    offline: false
+    project: auto_avsr
+    mode: online
+    entity: null
+model:
+    visual_backbone:
+        adim: 768
+        aheads: 12
+        eunits: 3072
+        elayers: 12
+        transformer_input_layer: conv3d
+        dropout_rate: 0.1
+        transformer_attn_dropout_rate: 0.1
+        transformer_encoder_attn_layer_type: rel_mha
+        macaron_style: true
+        use_cnn_module: true
+        cnn_module_kernel: 31
+        zero_triu: false
+        a_upsample_ratio: 1
+        relu_type: swish
+        ddim: ${model.visual_backbone.adim}
+        dheads: ${model.visual_backbone.aheads}
+        dunits: 3072
+        dlayers: 6
+        r_dlayers: 3
+        lsm_weight: 0.1
+        transformer_length_normalized_loss: false
+        mtlalpha: 0.1
+        mtlbeta: 0.3
+        ctc_type: builtin
+        rel_pos_type: latest
+    audio_backbone:
+        adim: 768
+        aheads: 12
+        eunits: 3072
+        elayers: 12
+        transformer_input_layer: conv1d
+        dropout_rate: 0.1
+        transformer_attn_dropout_rate: 0.1
+        transformer_encoder_attn_layer_type: rel_mha
+        macaron_style: true
+        use_cnn_module: true
+        cnn_module_kernel: 31
+        zero_triu: false
+        a_upsample_ratio: 1
+        relu_type: swish
+        ddim: ${model.audio_backbone.adim}
+        dheads: ${model.audio_backbone.aheads}
+        dlayers: 6
+        lsm_weight: 0.1
+        transformer_length_normalized_loss: false
+        mtlalpha: 0.1
+        mtlbeta: 0.3
+        ctc_type: builtin
+        rel_pos_type: latest
+    language_model:
+        pos_enc: none
+        embed_unit: 128
+        att_unit: 512
+        head: 8
+        unit: 2048
+        layer: 16
+        dropout_rate: 0.0
+optimizer:
+    name: adamw
+    lr: 0.001
+    warmup_epochs: 2
+    weight_decay: 0.03
+    betas:
+        - 0.9
+        - 0.98
+trainer:
+    precision: 32
+    max_epochs: 200
+    num_nodes: 1
+    gpus: -1
+    sync_batchnorm: true
+    default_root_dir: ${exp_dir}
+    num_sanity_val_steps: 0
+    limit_val_batches: 1.0
+    accumulate_grad_batches: 1
+    gradient_clip_val: 5.0
+    replace_sampler_ddp: false
+    resume_from_checkpoint: null
+decode:
+    name: default
+    snr_target: 999999
+
+exp_dir: ${code_root_dir}/exp/
+exp_name: cncvs_cnvsrc_webVideo_resume/
+num_workers: 8
+gpus: 1
+slurm_job_id: 1
+train: true
+log_wandb: false
+infer_path: null
+ckpt_path: null
+transfer_frontend: false
+remove_ctc: true
+resume_from_checkpoint: /home/lixiaolou/code/CNVSRC2024Baseline/exp/cncvs_cnvsrc_webVideo/runs/2025-02-22/16-40-05/model/last.ckpt

@@ -1,0 +1,120 @@
+# @package _group_
+
+common:
+    fp16: true
+    log_format: json
+    log_interval: 200
+    tensorboard_logdir: tblog
+    seed: 1337
+    user_dir: ???
+
+checkpoint:
+    save_interval: 2
+    keep_interval_updates: 1
+    no_epoch_checkpoints: true
+    best_checkpoint_metric: loss
+    maximize_best_checkpoint_metric: false
+
+distributed_training:
+    ddp_backend: c10d
+    find_unused_parameters: true
+    distributed_world_size: 6
+    distributed_port: 29671
+    nprocs_per_node: 6
+
+task:
+    _name: av_hubert_pretraining
+    is_s2s: false
+    data: ???
+    label_dir: ???
+    tokenizer_bpe_model: null # optional, only required for sentencepiece
+    normalize: true # must be consistent with pre-training
+    labels: ["wrd"]
+    single_target: true
+    fine_tuning: true
+    stack_order_audio: 4
+    tokenizer_bpe_name: sentencepiece
+    max_sample_size: 750 # 增加样本大小，增加数据多样性
+    modalities: ["video"]
+    image_aug: true
+    pad_audio: true
+    random_crop: false # 启用随机裁剪，增加数据增强
+
+dataset:
+    num_workers: 6
+    max_tokens: 3000
+    validate_after_updates: 0
+    validate_interval: 10 # 更频繁的验证，及时发现过拟合
+    train_subset: train
+    valid_subset: valid
+
+criterion:
+    _name: ctc
+    report_accuracy: false
+    post_process: none # 中文不需要 post_process，直接按字符计算
+    zero_infinity: true # 防止 T < L 时 loss 为 -inf 导致 NaN 梯度
+
+optimization:
+    max_update: 4000 
+    lr: [0.0001] 
+    sentence_avg: true
+    update_freq: [1]
+    clip_norm: 10.0
+
+optimizer:
+    _name: adam
+    adam_betas: (0.9,0.98)
+    adam_eps: 1e-08
+
+lr_scheduler:
+    _name: tri_stage
+    warmup_steps: 1000 # 更长的 warmup 让线性头稳定起步
+    hold_steps: 0
+    decay_steps: 3000 # 调整衰减步数以匹配总步数
+    final_lr_scale: 0.05
+
+model:
+    _name: av_hubert_ctc
+    w2v_path: ???
+    apply_mask: false
+    mask_selection: static
+    mask_length: 10
+    mask_other: 0
+    mask_prob: 0.75
+    mask_channel_selection: static
+    mask_channel_length: 64
+    mask_channel_other: 0
+    mask_channel_prob: 0.5
+    layerdrop: 0.0 # Probe test 不使用 layerdrop
+    dropout: 0.1
+    activation_dropout: 0.1
+    attention_dropout: 0.1
+    feature_grad_mult: 1.0
+    decoder_layers: 6
+    decoder_dropout: 0.1 # 简化 decoder dropout
+    decoder_attention_dropout: 0.1
+    decoder_activation_dropout: 0.1
+    freeze_finetune_updates: 0
+    share_decoder_input_output_embed: true
+    decoder_normalize_before: true
+
+hydra:
+    job:
+        config:
+            override_dirname:
+                kv_sep: "-"
+                item_sep: "__"
+                exclude_keys:
+                    - run
+                    - task.data
+                    - task.label_dir
+                    - model.w2v_path
+                    - dataset.train_subset
+                    - dataset.valid_subset
+                    - criterion.wer_kenlm_model
+                    - criterion.wer_lexicon
+    run:
+        dir: ???
+    sweep:
+        dir: ???
+        subdir: ${hydra.job.config_name}__${hydra.job.override_dirname}
